@@ -1,0 +1,13 @@
+{
+  "name": "醫師回覆 APP",
+  "short_name": "醫師回覆",
+  "description": "接收並回覆結核病診療諮詢表單",
+  "display": "standalone",
+  "background_color": "#f5f3ff",
+  "theme_color": "#7c3aed",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

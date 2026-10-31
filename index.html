@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>醫師回覆</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#7c3aed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="醫師回覆">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f3ff;font-family:-apple-system,"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;color:#1f2937;-webkit-text-size-adjust:100%}
+.wrap{max-width:560px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px calc(30px + env(safe-area-inset-bottom))}
+h2{color:#5b21b6;margin:6px 0}
+.btn{display:inline-block;font:inherit;font-size:16px;border:1px solid #c4b5fd;background:#fff;color:#4c1d95;border-radius:10px;padding:10px 14px;cursor:pointer;text-decoration:none}
+.btn.go{background:#7c3aed;border-color:#7c3aed;color:#fff;font-weight:bold;width:100%;font-size:18px;padding:14px;margin-top:10px}
+.btn:disabled{opacity:.5}
+input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:17px;margin-top:4px;font-family:inherit}
+label{display:block;margin:10px 0;font-size:15px}
+.card{background:#fff;border:1px solid #ddd6fe;border-left:6px solid #7c3aed;border-radius:14px;padding:13px 14px;margin:10px 0}
+.card.done{border-left-color:#16a34a;border-color:#e5e7eb}
+.card .t{font-weight:bold;font-size:16px}
+.card .s{font-size:13px;color:#64748b;margin-top:3px}
+.box{border-radius:14px;padding:13px 14px;margin:12px 0;font-size:15px;line-height:1.65}
+.warn{background:#fef3c7}.ok{background:#f0fdf4}.info{background:#ede9fe}
+.msg{color:#b3261e;min-height:1.3em;margin-top:8px;font-size:14px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.small{font-size:13px;color:#64748b}
+#alert{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));background:#fff;border-left:6px solid #16a34a;border-radius:12px;box-shadow:0 10px 30px #0004;padding:12px 14px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">載入中…</div>
+<div id="alert"></div>
+<script>
+/* ===== 設定：Apps Script 網頁應用程式網址 ===== */
+const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
+const VERSION = '1030-v39';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ls = { get: k => { try { return localStorage.getItem(k) } catch (e) { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch (e) {} }, del: k => { try { localStorage.removeItem(k) } catch (e) {} } };
+async function call(fn, ...args){
+  let r;
+  try { r = await fetch(API, { method: 'POST', body: JSON.stringify({ fn, args }), redirect: 'follow' }) }
+  catch (e) { throw new Error('無法連線，請確認網路') }
+  const j = await r.json().catch(() => { throw new Error('系統回應異常，請稍後再試') });
+  if (j.error) throw new Error(j.error);
+  return j.result;
+}
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+// 帳號金鑰：網址 ?k=… 優先，並記在這支手機
+const q = new URLSearchParams(location.search);
+let KEY = (q.get('k') || '').replace(/[^A-Za-z0-9]/g, '') || ls.get('appKey') || '';
+if (q.get('k')) ls.set('appKey', KEY);
+if (q.has('logout')) { ls.del('appKey'); KEY = ''; history.replaceState(null, '', location.pathname) }
+
+let swReg = null;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(r => { swReg = r }).catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', () => load());
+
+function showAlert(html){ const a = $('alert'); a.innerHTML = html + '<div style="text-align:right"><button class="btn" onclick="this.closest(\'#alert\').style.display=\'none\'">好</button></div>'; a.style.display = 'block'; try { navigator.vibrate && navigator.vibrate([200, 100, 200]) } catch (e) {} }
+
+/* ---------- 登錄 ---------- */
+function regView(){
+  $('app').innerHTML = `<h2>📲 醫師回覆 APP</h2><div class="small" style="font-size:15px;line-height:1.6">登錄後由承辦人核准，就能在這裡收到需要回覆的表單，直接填寫、簽章、回傳；APP 關著時也會跳通知。</div>
+    <label>醫師姓名 *<input id="rgName" autocomplete="name"></label>
+    <label>科別／醫院<input id="rgDept" placeholder="例如：胸腔內科／臺北榮總"></label>
+    <label>Email（有新表單時寄提醒，可空白）<input id="rgEmail" type="email" autocomplete="email"></label>
+    <label>手機（供承辦人確認身分，可空白）<input id="rgPhone" type="tel" autocomplete="tel"></label>
+    <div class="msg" id="rgMsg"></div><button class="btn go" id="rgGo">✅ 登錄</button>
+    <div class="small" style="margin-top:14px;text-align:center">版本 ${VERSION}</div>`;
+  $('rgGo').onclick = async () => {
+    const name = $('rgName').value.trim(); if (!name) return ($('rgMsg').textContent = '請輸入醫師姓名');
+    $('rgGo').disabled = true; $('rgMsg').textContent = '登錄中…';
+    try {
+      const r = await call('appRegister', name, $('rgDept').value.trim(), $('rgEmail').value.trim(), $('rgPhone').value.trim());
+      KEY = r.key; ls.set('appKey', KEY);
+      location.replace(location.pathname + '?k=' + KEY);   // 網址帶專屬帳號，加入主畫面後也記得
+    } catch (e) { $('rgGo').disabled = false; $('rgMsg').textContent = e.message }
+  };
+}
+
+/* ---------- 通知 ---------- */
+function pushBox(){
+  if (!canPush) return isIOS && !standalone ? '' : `<div class="box warn">這支手機的瀏覽器不支援背景通知，請改用 Chrome（Android）或把 APP 加到主畫面（iPhone）。</div>`;
+  if (isIOS && !standalone) return '';
+  if (Notification.permission === 'granted' && ls.get('pushOn_' + KEY)) return `<div class="small" style="margin:6px 0">🔔 通知已開啟</div>`;
+  if (Notification.permission === 'denied') return `<div class="box warn">🔕 通知已被關閉。請到手機「設定 → 通知 → 醫師回覆」開啟。</div>`;
+  return `<div class="box info"><b>🔔 開啟通知</b><br>有新表單時，APP 關著也會跳通知。<button class="btn go" id="pushGo">🔔 開啟通知</button><div class="msg" id="pushMsg"></div></div>`;
+}
+async function enablePush(){
+  const m = $('pushMsg'); m.textContent = '設定中…';
+  try {
+    if ((await Notification.requestPermission()) !== 'granted') throw new Error('沒有允許通知');
+    const reg = swReg || await navigator.serviceWorker.ready;
+    const pub = await call('appVapid');
+    const key = Uint8Array.from(atob(pub.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((pub.length + 3) % 4)), c => c.charCodeAt(0));
+    let sub = await reg.pushManager.getSubscription();
+    if (sub) { try { await sub.unsubscribe() } catch (e) {} }
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    await call('appSaveSub', KEY, sub.toJSON());
+    ls.set('pushOn_' + KEY, '1');
+    m.style.color = '#15803d'; m.textContent = '✅ 已開啟，稍後會收到一則測試通知';
+    setTimeout(load, 1500);
+  } catch (e) { m.textContent = '無法開啟：' + e.message }
+}
+function a2hsBox(){
+  if (standalone) return '';
+  return `<div class="box info"><b>📲 先把 APP 加到主畫面</b><br>` +
+    (isIOS ? '1. 用 <b>Safari</b> 開啟此頁<br>2. 按下方 <b>分享鍵 ⬆️</b> →「<b>加入主畫面</b>」→「新增」<br>3. 從主畫面的「醫師回覆」圖示打開，再按「🔔 開啟通知」'
+           : '1. 按右上角 <b>⋮</b> →「<b>安裝應用程式</b>」或「加到主畫面」<br>2. 從主畫面的「醫師回覆」圖示打開，再按「🔔 開啟通知」') +
+    `<div class="small" style="margin-top:6px">請在「這個畫面」加入主畫面（已記住您的帳號）。</div></div>`;
+}
+
+/* ---------- 我的表單 ---------- */
+let first = true;
+async function load(){
+  if (!KEY) return regView();
+  if (first) $('app').innerHTML = '<h2>📲 我的表單</h2><div class="small">載入中…</div>';
+  let r;
+  try { r = await call('appInbox', KEY) }
+  catch (e) {
+    if (/找不到這個 APP 帳號/.test(e.message)) { ls.del('appKey'); KEY = ''; return regView() }
+    if (first) $('app').innerHTML = `<h2>📲 我的表單</h2><div class="box warn">${esc(e.message)}</div><button class="btn" onclick="load()">🔄 重試</button>`;
+    return;
+  }
+  const head = `<div class="top"><h2>📲 我的表單</h2><button class="btn" id="refBtn" style="padding:7px 12px">🔄</button></div><div class="small" style="font-size:14px">${esc(r.me.name)} 醫師${r.me.dept ? '｜' + esc(r.me.dept) : ''}</div>`;
+  if (r.me.status !== '啟用') {
+    $('app').innerHTML = head + `<div class="box warn">⏳ 帳號${r.me.status === '停用' ? '已停用，請聯絡承辦人' : '等待承辦人核准中'}。<br>核准後，新的表單會出現在這裡。</div>` + a2hsBox() + pushBox();
+  } else {
+    const todo = r.cases.filter(c => c.status !== '已回傳'), done = r.cases.filter(c => c.status === '已回傳');
+    let seen = null; try { seen = JSON.parse(ls.get('seen_' + KEY) || 'null') } catch (e) {}
+    const fresh = seen ? todo.filter(c => !seen.includes(c.id)) : [];
+    ls.set('seen_' + KEY, JSON.stringify(todo.map(c => c.id)));
+    if (fresh.length && !first) showAlert(`<b style="color:#166534">📩 有 ${fresh.length} 份新表單</b><br>${fresh.map(c => '・' + esc(c.title)).join('<br>')}`);
+    try { if (navigator.setAppBadge) todo.length ? navigator.setAppBadge(todo.length) : navigator.clearAppBadge() } catch (e) {}
+    const card = (c, isTodo) => `<div class="card${isTodo ? '' : ' done'}"><div class="t">${fresh.includes(c) ? '🆕 ' : ''}${esc(c.title)}</div>` +
+      `<div class="s">${c.mrn ? '病歷號 ' + esc(c.mrn) + '｜' : ''}${isTodo ? (c.deadline ? '期限 ' + esc(c.deadline) : '送出 ' + esc(c.created)) : '已回傳 ' + esc(c.returned)}</div>` +
+      (isTodo ? `<a class="btn" href="${esc(c.link)}" style="margin-top:9px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 填寫並簽章</a>` : '') + `</div>`;
+    $('app').innerHTML = head + a2hsBox() + pushBox() +
+      (todo.length ? `<div style="font-weight:bold;color:#5b21b6;margin-top:8px">待回覆（${todo.length}）</div>` + todo.map(c => card(c, true)).join('') : `<div class="box ok">✅ 目前沒有待回覆的表單</div>`) +
+      (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') +
+      `<div class="small" style="margin-top:20px;text-align:center">版本 ${VERSION}</div>`;
+  }
+  $('refBtn').onclick = load;
+  if ($('pushGo')) $('pushGo').onclick = enablePush;
+  first = false;
+}
+load();
+setInterval(() => { if (!document.hidden) load() }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load() });
+</script>
+</body>
+</html>
