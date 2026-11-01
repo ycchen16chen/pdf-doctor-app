@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v45';
+const VERSION = '1030-v46';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -70,16 +70,18 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 function showAlert(html){ const a = $('alert'); a.innerHTML = html + '<div style="text-align:right"><button class="btn" onclick="this.closest(\'#alert\').style.display=\'none\'">好</button></div>'; a.style.display = 'block'; try { navigator.vibrate && navigator.vibrate([200, 100, 200]) } catch (e) {} }
 
 /* ---------- 登錄 ---------- */
+function fixDeng(el){ let v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); const a = v.slice(0, 3).replace(/[^A-Z]/g, ''), b = a.length === 3 ? v.slice(3).replace(/[^0-9]/g, '') : ''; el.value = a + b }
 function regView(){
   $('app').innerHTML = `<h2>📲 醫師回覆 APP</h2><div class="small" style="font-size:15px;line-height:1.6">登錄後由承辦人核准，就能在這裡收到需要回覆的表單，直接填寫、簽章、回傳；APP 關著時也會跳通知。</div>
     <label>醫師姓名 *<input id="rgName" autocomplete="name"></label>
-    <label>燈號 *<input id="rgPhone" inputmode="numeric"></label>
+    <label>燈號 *<span class="small">（前 3 碼英文大寫＋數字，例如 ABC1234）</span><input id="rgPhone" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABC1234" maxlength="12" style="text-transform:uppercase;letter-spacing:1px"></label>
     <label>Email（有新表單時寄提醒，可空白）<input id="rgEmail" type="email" autocomplete="email"></label>
     <div class="msg" id="rgMsg"></div><button class="btn go" id="rgGo">✅ 登錄</button>
     <div class="small" style="margin-top:14px;text-align:center">版本 ${VERSION}</div>`;
+  $('rgPhone').oninput = () => fixDeng($('rgPhone'));
   $('rgGo').onclick = async () => {
     const name = $('rgName').value.trim(); if (!name) return ($('rgMsg').textContent = '請輸入醫師姓名');
-    if (!$('rgPhone').value.trim()) return ($('rgMsg').textContent = '請輸入燈號');
+    if (!/^[A-Z]{3}\d+$/.test($('rgPhone').value.trim())) return ($('rgMsg').textContent = '燈號格式：前 3 碼英文大寫，後面為數字（例如 ABC1234）');
     $('rgGo').disabled = true; $('rgMsg').textContent = '登錄中…';
     try {
       const r = await call('appRegister', name, '', $('rgEmail').value.trim(), $('rgPhone').value.trim());
