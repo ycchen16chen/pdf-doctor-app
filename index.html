@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v47';
+const VERSION = '1030-v48';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -116,11 +116,13 @@ async function enablePush(){
   } catch (e) { m.textContent = '無法開啟：' + e.message }
 }
 function a2hsBox(){
-  if (standalone) return '';
+  // 已從主畫面開啟、已開啟通知、或按過「已加入」就不再顯示
+  if (standalone || ls.get('a2hsDone') || (window.Notification && Notification.permission === 'granted' && ls.get('pushOn_' + KEY))) return '';
   return `<div class="box info"><b>📲 先把 APP 加到主畫面</b><br>` +
     (isIOS ? '1. 用 <b>Safari</b> 開啟此頁<br>2. 按下方 <b>分享鍵 ⬆️</b> →「<b>加入主畫面</b>」→「新增」<br>3. 從主畫面的「醫師回覆」圖示打開，再按「🔔 開啟通知」'
            : '1. 按右上角 <b>⋮</b> →「<b>安裝應用程式</b>」或「加到主畫面」<br>2. 從主畫面的「醫師回覆」圖示打開，再按「🔔 開啟通知」') +
-    `<div class="small" style="margin-top:6px">請在「這個畫面」加入主畫面（已記住您的帳號）。</div></div>`;
+    `<div class="small" style="margin-top:6px">請在「這個畫面」加入主畫面（已記住您的帳號）。</div>` +
+    `<div style="text-align:right;margin-top:6px"><button class="btn" style="padding:6px 12px;font-size:14px" onclick="localStorage.setItem('a2hsDone','1');this.closest('.box').remove()">✓ 已加入，不再顯示</button></div></div>`;
 }
 
 /* ---------- 我的表單 ---------- */
