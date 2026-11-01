@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v48';
+const VERSION = '1030-v49';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -125,6 +125,8 @@ function a2hsBox(){
     `<div style="text-align:right;margin-top:6px"><button class="btn" style="padding:6px 12px;font-size:14px" onclick="localStorage.setItem('a2hsDone','1');this.closest('.box').remove()">✓ 已加入，不再顯示</button></div></div>`;
 }
 
+/* 填寫連結：去掉 &app=（舊版雲端程式會誤開成 APP 首頁），直接打開填寫簽章畫面 */
+const fillLink = u => String(u || '').replace(/&app=[^&#]*/, '');
 /* ---------- 我的表單 ---------- */
 let first = true;
 async function load(){
@@ -149,7 +151,7 @@ async function load(){
     try { if (navigator.setAppBadge) todo.length ? navigator.setAppBadge(todo.length) : navigator.clearAppBadge() } catch (e) {}
     const card = (c, isTodo) => `<div class="card${isTodo ? '' : ' done'}"><div class="t">${fresh.includes(c) ? '🆕 ' : ''}${esc(c.title)}</div>` +
       `<div class="s">${c.mrn ? '病歷號 ' + esc(c.mrn) + '｜' : ''}${isTodo ? (c.deadline ? '期限 ' + esc(c.deadline) : '送出 ' + esc(c.created)) : '已回傳 ' + esc(c.returned)}</div>` +
-      (isTodo ? `<a class="btn" href="${esc(c.link)}" style="margin-top:9px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 填寫並簽章</a>` : '') + `</div>`;
+      (isTodo ? `<a class="btn" href="${esc(fillLink(c.link))}" style="margin-top:9px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 填寫並簽章</a>` : '') + `</div>`;
     $('app').innerHTML = head + a2hsBox() + pushBox() +
       (todo.length ? `<div style="font-weight:bold;color:#5b21b6;margin-top:8px">待回覆（${todo.length}）</div>` + todo.map(c => card(c, true)).join('') : `<div class="box ok">✅ 目前沒有待回覆的表單</div>`) +
       (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') +
