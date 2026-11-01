@@ -14,4 +14,8 @@ self.addEventListener('notificationclick', e => {
     return self.clients.openWindow(self.registration.scope);
   }));
 });
-self.addEventListener('fetch', () => {});
+// 每次打開都抓最新版畫面（避免手機用到舊版）
+self.addEventListener('fetch', e => {
+  if (e.request.mode === 'navigate') e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request)));
+});
+/* sw 1030-v47 */

@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v46';
+const VERSION = '1030-v47';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -64,7 +64,7 @@ if (q.get('k')) ls.set('appKey', KEY);
 if (q.has('logout')) { ls.del('appKey'); KEY = ''; history.replaceState(null, '', location.pathname) }
 
 let swReg = null;
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(r => { swReg = r }).catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { swReg = r }).catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', () => load());
 
 function showAlert(html){ const a = $('alert'); a.innerHTML = html + '<div style="text-align:right"><button class="btn" onclick="this.closest(\'#alert\').style.display=\'none\'">好</button></div>'; a.style.display = 'block'; try { navigator.vibrate && navigator.vibrate([200, 100, 200]) } catch (e) {} }
