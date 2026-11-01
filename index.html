@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v49';
+const VERSION = '1030-v53';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -63,6 +63,9 @@ let KEY = (q.get('k') || '').replace(/[^A-Za-z0-9]/g, '') || ls.get('appKey') ||
 if (q.get('k')) ls.set('appKey', KEY);
 if (q.has('logout')) { ls.del('appKey'); KEY = ''; history.replaceState(null, '', location.pathname) }
 
+// 把帳號金鑰交給背景通知程式（service worker），推播來時才能取回通知文字
+function keyToSW(){ try { const r = indexedDB.open('pda', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { try { const t = r.result.transaction('kv', 'readwrite'); t.objectStore('kv').put(KEY || '', 'key') } catch (e) {} } } catch (e) {} }
+keyToSW();
 let swReg = null;
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { swReg = r }).catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', () => load());
@@ -85,7 +88,7 @@ function regView(){
     $('rgGo').disabled = true; $('rgMsg').textContent = '登錄中…';
     try {
       const r = await call('appRegister', name, '', $('rgEmail').value.trim(), $('rgPhone').value.trim());
-      KEY = r.key; ls.set('appKey', KEY);
+      KEY = r.key; ls.set('appKey', KEY); keyToSW();
       location.replace(location.pathname + '?k=' + KEY);   // 網址帶專屬帳號，加入主畫面後也記得
     } catch (e) { $('rgGo').disabled = false; $('rgMsg').textContent = e.message }
   };
@@ -127,6 +130,31 @@ function a2hsBox(){
 
 /* 填寫連結：去掉 &app=（舊版雲端程式會誤開成 APP 首頁），直接打開填寫簽章畫面 */
 const fillLink = u => String(u || '').replace(/&app=[^&#]*/, '');
+/* ---------- 管理者：檢視回覆內容（已隱蔽個資版） ---------- */
+let pdfjsReady = null;
+function loadPdfjs(){
+  if (pdfjsReady) return pdfjsReady;
+  return pdfjsReady = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok() }; sc.onerror = () => no(new Error('檢視元件載入失敗')); document.head.appendChild(sc) });
+}
+async function viewReply(id, btn){
+  const old = btn.textContent; btn.disabled = true; btn.textContent = '載入中…';
+  try {
+    const [r] = await Promise.all([call('appViewReply', KEY, id), loadPdfjs()]);
+    const bytes = Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0));
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:20;background:#334155;overflow:auto;-webkit-overflow-scrolling:touch';
+    ov.innerHTML = `<div style="position:sticky;top:0;background:#1e293b;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:14px"><b>${esc(r.doctor || '')} 醫師的回覆</b><br>${esc(r.title)}<span style="color:#94a3b8">（已隱蔽個資）</span></div><button class="btn" style="padding:7px 14px">✕ 關閉</button></div><div class="pv" style="padding:10px"></div>`;
+    document.body.appendChild(ov); ov.querySelector('button').onclick = () => ov.remove();
+    const doc = await pdfjsLib.getDocument({ data: bytes, cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true }).promise;
+    for (let i = 1; i <= doc.numPages; i++) {
+      const pg = await doc.getPage(i), w = Math.min(window.innerWidth - 20, 900), vp0 = pg.getViewport({ scale: 1 }), sc = w / vp0.width * (window.devicePixelRatio || 1), vp = pg.getViewport({ scale: sc });
+      const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; c.style.cssText = `width:${w}px;display:block;margin:0 auto 10px;background:#fff;border-radius:4px`;
+      ov.querySelector('.pv').appendChild(c); await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (e) { showAlert(`<b style="color:#b3261e">無法檢視</b><br>${esc(e.message)}`) }
+  finally { btn.disabled = false; btn.textContent = old }
+}
+
 /* ---------- 我的表單 ---------- */
 let first = true;
 async function load(){
@@ -152,12 +180,21 @@ async function load(){
     const card = (c, isTodo) => `<div class="card${isTodo ? '' : ' done'}"><div class="t">${fresh.includes(c) ? '🆕 ' : ''}${esc(c.title)}</div>` +
       `<div class="s">${c.mrn ? '病歷號 ' + esc(c.mrn) + '｜' : ''}${isTodo ? (c.deadline ? '期限 ' + esc(c.deadline) : '送出 ' + esc(c.created)) : '已回傳 ' + esc(c.returned)}</div>` +
       (isTodo ? `<a class="btn" href="${esc(fillLink(c.link))}" style="margin-top:9px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 填寫並簽章</a>` : '') + `</div>`;
+    const R = r.replies || [], mgr = r.me.role === '管理者';
+    let seenR = null; try { seenR = JSON.parse(ls.get('seenR_' + KEY) || 'null') } catch (e) {}
+    const freshR = seenR ? R.filter(x => !seenR.includes(x.id)) : [];
+    if (mgr) ls.set('seenR_' + KEY, JSON.stringify(R.map(x => x.id)));
+    if (freshR.length && !first) showAlert(`<b style="color:#166534">✅ ${freshR.length} 份新的醫師回覆</b><br>${freshR.map(x => '・' + esc(x.doctor) + ' 醫師：' + esc(x.title)).join('<br>')}`);
+    const mgrBox = !mgr ? '' : `<div style="margin-top:16px;font-weight:bold;color:#166534">👑 醫師回覆（管理者，近 30 天）</div>` +
+      (R.length ? R.map(x => `<div class="card done"><div class="t">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
+        (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已超過 ${r.keepDays || 7} 天保留期限</div>`) + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
     $('app').innerHTML = head + a2hsBox() + pushBox() +
       (todo.length ? `<div style="font-weight:bold;color:#5b21b6;margin-top:8px">待回覆（${todo.length}）</div>` + todo.map(c => card(c, true)).join('') : `<div class="box ok">✅ 目前沒有待回覆的表單</div>`) +
-      (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') +
+      (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') + mgrBox +
       `<div class="small" style="margin-top:20px;text-align:center">版本 ${VERSION}</div>`;
   }
   $('refBtn').onclick = load;
+  $('app').querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewReply(b.dataset.view, b));
   if ($('pushGo')) $('pushGo').onclick = enablePush;
   first = false;
 }
