@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v39';
+const VERSION = '1030-v45';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -73,16 +73,16 @@ function showAlert(html){ const a = $('alert'); a.innerHTML = html + '<div style
 function regView(){
   $('app').innerHTML = `<h2>📲 醫師回覆 APP</h2><div class="small" style="font-size:15px;line-height:1.6">登錄後由承辦人核准，就能在這裡收到需要回覆的表單，直接填寫、簽章、回傳；APP 關著時也會跳通知。</div>
     <label>醫師姓名 *<input id="rgName" autocomplete="name"></label>
-    <label>科別／醫院<input id="rgDept" placeholder="例如：胸腔內科／臺北榮總"></label>
+    <label>燈號 *<input id="rgPhone" inputmode="numeric"></label>
     <label>Email（有新表單時寄提醒，可空白）<input id="rgEmail" type="email" autocomplete="email"></label>
-    <label>手機（供承辦人確認身分，可空白）<input id="rgPhone" type="tel" autocomplete="tel"></label>
     <div class="msg" id="rgMsg"></div><button class="btn go" id="rgGo">✅ 登錄</button>
     <div class="small" style="margin-top:14px;text-align:center">版本 ${VERSION}</div>`;
   $('rgGo').onclick = async () => {
     const name = $('rgName').value.trim(); if (!name) return ($('rgMsg').textContent = '請輸入醫師姓名');
+    if (!$('rgPhone').value.trim()) return ($('rgMsg').textContent = '請輸入燈號');
     $('rgGo').disabled = true; $('rgMsg').textContent = '登錄中…';
     try {
-      const r = await call('appRegister', name, $('rgDept').value.trim(), $('rgEmail').value.trim(), $('rgPhone').value.trim());
+      const r = await call('appRegister', name, '', $('rgEmail').value.trim(), $('rgPhone').value.trim());
       KEY = r.key; ls.set('appKey', KEY);
       location.replace(location.pathname + '?k=' + KEY);   // 網址帶專屬帳號，加入主畫面後也記得
     } catch (e) { $('rgGo').disabled = false; $('rgMsg').textContent = e.message }
@@ -133,7 +133,7 @@ async function load(){
     if (first) $('app').innerHTML = `<h2>📲 我的表單</h2><div class="box warn">${esc(e.message)}</div><button class="btn" onclick="load()">🔄 重試</button>`;
     return;
   }
-  const head = `<div class="top"><h2>📲 我的表單</h2><button class="btn" id="refBtn" style="padding:7px 12px">🔄</button></div><div class="small" style="font-size:14px">${esc(r.me.name)} 醫師${r.me.dept ? '｜' + esc(r.me.dept) : ''}</div>`;
+  const head = `<div class="top"><h2>📲 我的表單</h2><button class="btn" id="refBtn" style="padding:7px 12px">🔄</button></div><div class="small" style="font-size:14px">${esc(r.me.name)} 醫師${r.me.phone ? '｜燈號 ' + esc(r.me.phone) : ''}</div>`;
   if (r.me.status !== '啟用') {
     $('app').innerHTML = head + `<div class="box warn">⏳ 帳號${r.me.status === '停用' ? '已停用，請聯絡承辦人' : '等待承辦人核准中'}。<br>核准後，新的表單會出現在這裡。</div>` + a2hsBox() + pushBox();
   } else {
