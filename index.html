@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v73';
+const VERSION = '1030-v75';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -136,14 +136,14 @@ function loadPdfjs(){
   if (pdfjsReady) return pdfjsReady;
   return pdfjsReady = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok() }; sc.onerror = () => no(new Error('檢視元件載入失敗')); document.head.appendChild(sc) });
 }
-async function viewReply(id, btn){
+async function viewReply(id, btn, form){
   const old = btn.textContent; btn.disabled = true; btn.textContent = '載入中…';
   try {
-    const [r] = await Promise.all([call('appViewReply', KEY, id), loadPdfjs()]);
+    const [r] = await Promise.all([form ? call('appMgrCase', KEY, id, 'view') : call('appViewReply', KEY, id), loadPdfjs()]);
     const bytes = Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0));
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:20;background:#334155;overflow:auto;-webkit-overflow-scrolling:touch';
-    ov.innerHTML = `<div style="position:sticky;top:0;background:#1e293b;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:14px"><b>${esc(r.doctor || '')} 醫師的回覆</b><br>${esc(r.title)}<span style="color:#94a3b8">（已隱蔽個資）</span></div><button class="btn" style="padding:7px 14px">✕ 關閉</button></div><div class="pv" style="padding:10px"></div>`;
+    ov.innerHTML = `<div style="position:sticky;top:0;background:#1e293b;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:14px"><b>${form ? '處理中表單｜' + esc(r.doctor || '') + ' 醫師' : esc(r.doctor || '') + ' 醫師的回覆'}</b><br>${esc(r.title)}<span style="color:#94a3b8">（已隱蔽個資）</span></div><button class="btn" style="padding:7px 14px">✕ 關閉</button></div><div class="pv" style="padding:10px"></div>`;
     document.body.appendChild(ov); ov.querySelector('button').onclick = () => ov.remove();
     const doc = await pdfjsLib.getDocument({ data: bytes, cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true }).promise;
     for (let i = 1; i <= doc.numPages; i++) {
@@ -188,13 +188,27 @@ async function load(){
     const mgrBox = !mgr ? '' : `<div style="margin-top:16px;font-weight:bold;color:#166534">👑 醫師回覆（管理者，近 30 天）</div>` +
       (R.length ? R.map(x => `<div class="card done"><div class="t">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
         (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已超過 ${r.keepDays || 7} 天保留期限</div>`) + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
+    const A = r.active || [];
+    const actBox = !mgr ? '' : `<details style="margin-top:16px"${A.length ? ' open' : ''}><summary style="font-weight:bold;color:#1d4ed8;font-size:15px">👑 所有處理中案件（${A.length}）</summary><div class="small" style="margin:4px 0 6px">管理者檢視：表單已隱蔽個資（姓名只留頭尾）</div>` +
+      (A.length ? A.map(x => `<div class="card"><div class="t">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}${esc(x.doctor)}${x.mine ? '（我）' : ''}<br>${x.status === '已開啟' ? '👀 醫師已開啟 ' + esc(x.opened) : '⏳ 醫師尚未開啟'}${x.deadline ? '｜期限 ' + esc(x.deadline) : ''}<br><span style="color:#94a3b8">送出 ${esc(x.created)}${x.lastSent && x.lastSent !== x.created ? '｜最後提醒 ' + esc(x.lastSent) : ''}</span></div>` +
+        `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-form="${esc(x.id)}" style="padding:7px 12px;font-size:14px">👁 查看表單</button>` +
+        (x.app || x.mail ? `<button class="btn" data-remind="${esc(x.id)}" style="padding:7px 12px;font-size:14px">🔔 提醒醫師</button>` : '') +
+        `<a class="btn" href="${esc(fillLink(x.link))}" style="padding:7px 12px;font-size:14px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 開啟填寫</a></div></div>`).join('') : '<div class="box ok">目前沒有處理中的案件</div>') + `</details>`;
     $('app').innerHTML = head + a2hsBox() + pushBox() +
       (todo.length ? `<div style="font-weight:bold;color:#5b21b6;margin-top:8px">待回覆（${todo.length}）</div>` + todo.map(c => card(c, true)).join('') : `<div class="box ok">✅ 目前沒有待回覆的表單</div>`) +
-      (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') + mgrBox +
+      (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') + actBox + mgrBox +
       `<div class="small" style="margin-top:20px;text-align:center">版本 ${VERSION}</div>`;
   }
   $('refBtn').onclick = load;
   $('app').querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewReply(b.dataset.view, b));
+  $('app').querySelectorAll('[data-form]').forEach(b => b.onclick = () => viewReply(b.dataset.form, b, true));
+  $('app').querySelectorAll('[data-remind]').forEach(b => b.onclick = async () => {
+    if (!confirm('要提醒這位醫師填寫嗎？（APP 推播＋Email）')) return;
+    const old = b.textContent; b.disabled = true; b.textContent = '傳送中…';
+    try { const x = await call('appMgrCase', KEY, b.dataset.remind, 'remind'); showAlert(`<b style="color:#166534">✅ 已提醒醫師</b><br>${x.push ? 'APP 推播 ' + x.push + ' 支手機' : ''}${x.push && x.mail ? '＋' : ''}${x.mail ? 'Email' : ''}`) }
+    catch (e) { showAlert(`<b style="color:#b3261e">提醒失敗</b><br>${esc(e.message)}`) }
+    finally { b.disabled = false; b.textContent = old }
+  });
   if ($('pushGo')) $('pushGo').onclick = enablePush;
   first = false;
 }
