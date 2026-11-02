@@ -40,7 +40,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v53';
+const VERSION = '1030-v73';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -129,7 +129,7 @@ function a2hsBox(){
 }
 
 /* 填寫連結：去掉 &app=（舊版雲端程式會誤開成 APP 首頁），直接打開填寫簽章畫面 */
-const fillLink = u => String(u || '').replace(/&app=[^&#]*/, '');
+const fillLink = u => { const s = String(u || ''), i = s.indexOf('?'); return i < 0 ? s : 'go.html#' + s.slice(i + 1) };   // 經 go.html 開啟，不受手機登入多個 Google 帳號影響
 /* ---------- 管理者：檢視回覆內容（已隱蔽個資版） ---------- */
 let pdfjsReady = null;
 function loadPdfjs(){

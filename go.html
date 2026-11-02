@@ -12,23 +12,34 @@
 </style>
 </head>
 <body>
-<h2>正在開啟表單…</h2>
+<h2 id="h">正在開啟表單…</h2>
 <div id="msg">請稍候，會自動進入填寫並簽章的頁面。</div>
-<a class="btn" id="go" href="#">👉 如果沒有自動開啟，請點這裡</a>
+<a class="btn" id="go" href="#" style="display:none">👉 改用另一種方式開啟</a>
 <div class="s">臺北榮總　結核病診療諮詢小組　醫師回覆</div>
 <script>
-// 轉址頁：信件與 QR Code 先連到這裡，再轉到 Google Apps Script 的填寫頁
-// （院內 Outlook 的連結安全檢查常常無法檢查 script.google.com，直接連會被擋下）
+// 轉址頁：信件與 QR Code 先連到這裡。
+// 1) 院內 Outlook 的連結安全檢查常無法檢查 script.google.com，直接連會被擋。
+// 2) 瀏覽器同時登入多個 Google 帳號時，直接開 script.google.com 會被轉到 /u/1/ 而顯示「無法開啟這個檔案」。
+// 所以這裡用 POST（不帶 Google 登入資訊）向雲端取得填寫頁，直接顯示在這個網頁上。
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const q = (location.hash.slice(1) || location.search.slice(1)).replace(/[^A-Za-z0-9=&_-]/g, '');
-const a = document.getElementById('go');
-if (/(^|&)id=[\w-]+/.test(q) && /(^|&)t=\w+/.test(q)) {
-  const url = API + '?' + q;
-  a.href = url;
-  location.replace(url);
+const raw = (location.hash.slice(1) || location.search.slice(1)).replace(/[^A-Za-z0-9=&_-]/g, '');
+const q = {}; raw.split('&').forEach(kv => { const i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = kv.slice(i + 1) });
+const a = document.getElementById('go'), say = (h, m) => { document.getElementById('h').textContent = h; document.getElementById('msg').textContent = m };
+if (!q.id || !q.t) {
+  say('連結不完整', '請從 E-mail 重新點選，或用手機掃描 QR Code。');
 } else {
-  document.getElementById('msg').textContent = '連結不完整，請從 E-mail 重新點選，或用手機掃描 QR Code。';
-  a.style.display = 'none';
+  a.href = API + '?' + raw;   // 備用：直接開雲端網址
+  (async () => {
+    try {
+      const r = await fetch(API, { method: 'POST', body: JSON.stringify({ fn: 'getFillPage', args: [q] }), redirect: 'follow', credentials: 'omit' });
+      const j = JSON.parse(await r.text());
+      if (j.error) { say('無法開啟表單', j.error); return }
+      document.open(); document.write(j.result); document.close();
+    } catch (e) {
+      say('無法開啟表單', '網路連線異常，請稍後再試，或按下方按鈕改用另一種方式開啟。');
+      a.style.display = 'inline-block';
+    }
+  })();
 }
 </script>
 </body>
