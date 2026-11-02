@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>開啟表單中…</title>
+<style>
+  body { font-family: -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif; text-align: center; padding: 48px 20px; color: #1f2937; background: #f1f5f9 }
+  a.btn { display: inline-block; margin-top: 18px; padding: 14px 24px; background: #1d4ed8; color: #fff; border-radius: 10px; font-size: 18px; font-weight: bold; text-decoration: none }
+  .s { color: #64748b; font-size: 14px; margin-top: 16px }
+</style>
+</head>
+<body>
+<h2>正在開啟表單…</h2>
+<div id="msg">請稍候，會自動進入填寫並簽章的頁面。</div>
+<a class="btn" id="go" href="#">👉 如果沒有自動開啟，請點這裡</a>
+<div class="s">臺北榮總　結核病診療諮詢小組　醫師回覆</div>
+<script>
+// 轉址頁：信件與 QR Code 先連到這裡，再轉到 Google Apps Script 的填寫頁
+// （院內 Outlook 的連結安全檢查常常無法檢查 script.google.com，直接連會被擋下）
+const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
+const q = (location.hash.slice(1) || location.search.slice(1)).replace(/[^A-Za-z0-9=&_-]/g, '');
+const a = document.getElementById('go');
+if (/(^|&)id=[\w-]+/.test(q) && /(^|&)t=\w+/.test(q)) {
+  const url = API + '?' + q;
+  a.href = url;
+  location.replace(url);
+} else {
+  document.getElementById('msg').textContent = '連結不完整，請從 E-mail 重新點選，或用手機掃描 QR Code。';
+  a.style.display = 'none';
+}
+</script>
+</body>
+</html>
