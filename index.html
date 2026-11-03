@@ -22,6 +22,7 @@ h2{color:#5b21b6;margin:6px 0}
 .btn:disabled{opacity:.5}
 input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:17px;margin-top:4px;font-family:inherit}
 label{display:block;margin:10px 0;font-size:15px}
+.xdel{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:15px;line-height:1;padding:0;cursor:pointer}
 .card{background:#fff;border:1px solid #ddd6fe;border-left:6px solid #7c3aed;border-radius:14px;padding:13px 14px;margin:10px 0}
 .card.done{border-left-color:#16a34a;border-color:#e5e7eb}
 .card .t{font-weight:bold;font-size:16px}
@@ -40,7 +41,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v79';
+const VERSION = '1030-v100';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -171,34 +172,48 @@ async function load(){
   if (r.me.status !== '啟用') {
     $('app').innerHTML = head + `<div class="box warn">⏳ 帳號${r.me.status === '停用' ? '已停用，請聯絡承辦人' : '等待承辦人核准中'}。<br>核准後，新的表單會出現在這裡。</div>` + a2hsBox() + pushBox();
   } else {
-    const todo = r.cases.filter(c => c.status !== '已回傳'), done = r.cases.filter(c => c.status === '已回傳');
+    // 從名單移除（只是不顯示在這支手機的 APP，不會刪除表單或影響承辦人）
+    let hid = []; try { hid = JSON.parse(ls.get('hid_' + KEY) || '[]') } catch (e) {}
+    const H = new Set(hid), showHid = window.__showHid;
+    const vis = (pre, list) => showHid ? list : list.filter(x => !H.has(pre + x.id));
+    const nHid = r.cases.filter(c => H.has('c:' + c.id)).length + (r.replies || []).filter(x => H.has('r:' + x.id)).length + (r.active || []).filter(x => H.has('a:' + x.id)).length;
+    const delBtn = (k) => `<button class="xdel" data-hide="${esc(k)}" title="從名單移除">${H.has(k) ? '↩' : '🗑'}</button>`;
+    const todo = vis('c:', r.cases.filter(c => c.status !== '已回傳')), done = vis('c:', r.cases.filter(c => c.status === '已回傳'));
     let seen = null; try { seen = JSON.parse(ls.get('seen_' + KEY) || 'null') } catch (e) {}
     const fresh = seen ? todo.filter(c => !seen.includes(c.id)) : [];
     ls.set('seen_' + KEY, JSON.stringify(todo.map(c => c.id)));
     if (fresh.length && !first) showAlert(`<b style="color:#166534">📩 有 ${fresh.length} 份新表單</b><br>${fresh.map(c => '・' + esc(c.title)).join('<br>')}`);
     try { if (navigator.setAppBadge) todo.length ? navigator.setAppBadge(todo.length) : navigator.clearAppBadge() } catch (e) {}
-    const card = (c, isTodo) => `<div class="card${isTodo ? '' : ' done'}"><div class="t">${fresh.includes(c) ? '🆕 ' : ''}${esc(c.title)}</div>` +
+    const card = (c, isTodo) => `<div class="card${isTodo ? '' : ' done'}" style="position:relative">${delBtn('c:' + c.id)}<div class="t" style="padding-right:34px">${fresh.includes(c) ? '🆕 ' : ''}${esc(c.title)}</div>` +
       `<div class="s">${c.mrn ? '病歷號 ' + esc(c.mrn) + '｜' : ''}${isTodo ? (c.deadline ? '期限 ' + esc(c.deadline) : '送出 ' + esc(c.created)) : '已回傳 ' + esc(c.returned)}</div>` +
       (isTodo ? `<a class="btn" href="${esc(fillLink(c.link))}" style="margin-top:9px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 填寫並簽章</a>` : '') + `</div>`;
-    const R = r.replies || [], mgr = r.me.role === '管理者';
+    const R = vis('r:', r.replies || []), mgr = r.me.role === '管理者';
     let seenR = null; try { seenR = JSON.parse(ls.get('seenR_' + KEY) || 'null') } catch (e) {}
     const freshR = seenR ? R.filter(x => !seenR.includes(x.id)) : [];
     if (mgr) ls.set('seenR_' + KEY, JSON.stringify(R.map(x => x.id)));
     if (freshR.length && !first) showAlert(`<b style="color:#166534">✅ ${freshR.length} 份新的醫師回覆</b><br>${freshR.map(x => '・' + esc(x.doctor) + ' 醫師：' + esc(x.title)).join('<br>')}`);
     const mgrBox = !mgr ? '' : `<div style="margin-top:16px;font-weight:bold;color:#166534">👑 醫師回覆（管理者）</div>` +
-      (R.length ? R.map(x => `<div class="card done"><div class="t">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
+      (R.length ? R.map(x => `<div class="card done" style="position:relative">${delBtn('r:' + x.id)}<div class="t" style="padding-right:34px">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
         (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已清除（舊版保留期限），請向承辦人索取</div>`) + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
-    const A = r.active || [];
+    const A = vis('a:', r.active || []);
     const actBox = !mgr ? '' : `<details style="margin-top:16px"${A.length ? ' open' : ''}><summary style="font-weight:bold;color:#1d4ed8;font-size:15px">👑 所有處理中案件（${A.length}）</summary><div class="small" style="margin:4px 0 6px">管理者檢視：表單已隱蔽個資（姓名只留頭尾）</div>` +
-      (A.length ? A.map(x => `<div class="card"><div class="t">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}${esc(x.doctor)}${x.mine ? '（我）' : ''}<br>${x.status === '已開啟' ? '👀 醫師已開啟 ' + esc(x.opened) : '⏳ 醫師尚未開啟'}${x.deadline ? '｜期限 ' + esc(x.deadline) : ''}<br><span style="color:#94a3b8">送出 ${esc(x.created)}${x.lastSent && x.lastSent !== x.created ? '｜最後提醒 ' + esc(x.lastSent) : ''}</span></div>` +
+      (A.length ? A.map(x => `<div class="card" style="position:relative">${delBtn('a:' + x.id)}<div class="t" style="padding-right:34px">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}${esc(x.doctor)}${x.mine ? '（我）' : ''}<br>${x.status === '已開啟' ? '👀 醫師已開啟 ' + esc(x.opened) : '⏳ 醫師尚未開啟'}${x.deadline ? '｜期限 ' + esc(x.deadline) : ''}<br><span style="color:#94a3b8">送出 ${esc(x.created)}${x.lastSent && x.lastSent !== x.created ? '｜最後提醒 ' + esc(x.lastSent) : ''}</span></div>` +
         `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-form="${esc(x.id)}" style="padding:7px 12px;font-size:14px">👁 查看表單</button>` +
         (x.app || x.mail ? `<button class="btn" data-remind="${esc(x.id)}" style="padding:7px 12px;font-size:14px">🔔 提醒醫師</button>` : '') +
         `<a class="btn" href="${esc(fillLink(x.link))}" style="padding:7px 12px;font-size:14px;background:#7c3aed;color:#fff;border-color:#7c3aed">✍ 開啟填寫</a></div></div>`).join('') : '<div class="box ok">目前沒有處理中的案件</div>') + `</details>`;
     $('app').innerHTML = head + a2hsBox() + pushBox() +
       (todo.length ? `<div style="font-weight:bold;color:#5b21b6;margin-top:8px">待回覆（${todo.length}）</div>` + todo.map(c => card(c, true)).join('') : `<div class="box ok">✅ 目前沒有待回覆的表單</div>`) +
       (done.length ? `<details style="margin-top:12px"><summary class="small" style="font-size:15px">已回傳（${done.length}）</summary>${done.map(c => card(c, false)).join('')}</details>` : '') + actBox + mgrBox +
+      (nHid ? `<div style="text-align:center;margin-top:16px"><button class="btn" id="hidTog" style="padding:7px 14px;font-size:14px">${showHid ? '🙈 隱藏已移除的項目' : `♻ 顯示已移除的項目（${nHid}）`}</button></div>` : '') +
       `<div class="small" style="margin-top:20px;text-align:center">版本 ${VERSION}</div>`;
   }
+  if ($('hidTog')) $('hidTog').onclick = () => { window.__showHid = !window.__showHid; load() };
+  $('app').querySelectorAll('[data-hide]').forEach(b => b.onclick = () => {
+    let hid = []; try { hid = JSON.parse(ls.get('hid_' + KEY) || '[]') } catch (e) {}
+    const k = b.dataset.hide, on = hid.includes(k);
+    if (!on && k.startsWith('c:') && !b.closest('.card').classList.contains('done') && !confirm('這份表單還沒回覆，確定要從名單移除嗎？\n（只是不顯示，承辦人那邊不受影響；可在最下方「顯示已移除的項目」找回）')) return;
+    hid = on ? hid.filter(x => x !== k) : hid.concat(k); ls.set('hid_' + KEY, JSON.stringify(hid.slice(-500))); load();
+  });
   $('refBtn').onclick = load;
   $('app').querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewReply(b.dataset.view, b));
   $('app').querySelectorAll('[data-form]').forEach(b => b.onclick = () => viewReply(b.dataset.form, b, true));
