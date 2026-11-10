@@ -41,7 +41,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v136';
+const VERSION = '1030-v137';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -211,7 +211,7 @@ async function load(){
     if (freshR.length && !first) showAlert(`<b style="color:#166534">✅ ${freshR.length} 份新的醫師回覆</b><br>${freshR.map(x => '・' + esc(x.doctor) + ' 醫師：' + esc(x.title)).join('<br>')}`);
     const mgrBox = !mgr ? '' : `<div style="margin-top:16px;font-weight:bold;color:#166534">👑 醫師回覆（管理者）</div>` +
       (R.length ? R.map(x => `<div class="card done" style="position:relative">${delBtn('r:' + x.id)}<div class="t" style="padding-right:34px">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
-        (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已清除（舊版保留期限），請向承辦人索取</div>`) + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
+        (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已清除（舊版保留期限），請向承辦人索取</div>`) + (x.portal ? (x.back ? `<div class="s" style="margin-top:6px;color:${/^已傳回/.test(x.back) ? '#166534' : /^錯誤/.test(x.back) ? '#b3261e' : '#b45309'}">📤 傳回感管：${esc(x.back)}</div>` : '') + (!x.back || /^錯誤/.test(x.back) ? (x.signed ? ` <button class="btn" data-back="${esc(x.id)}" style="margin-top:9px;background:#16a34a;color:#fff;border-color:#16a34a">📤 傳回感管＋Email 通知</button>` : `<div class="s" style="margin-top:6px;color:#b3261e">醫師未簽章，不能傳回感管</div>`) : '') : '') + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
     const Q = r.queue || [], qWait = Q.filter(x => x.status === '待分派' || x.status === '錯誤');
     const qTag = s => ({ '待分派': '🟡 待分派', '已指派': '⏳ 建立中', '已建立': '✅ 已寄出', '錯誤': '⚠ 失敗', '已由承辦人處理': '✔ 承辦人已處理' })[s] || s;
     const dispBox = !mgr ? '' : `<details style="margin-top:16px"${qWait.length ? ' open' : ''}><summary style="font-weight:bold;color:#b45309;font-size:15px">📥 待分派判讀：胸部X光（${qWait.length}）</summary><div class="small" style="margin:4px 0 6px">感管室送來的結核病接觸者胸部X光檢查報告表。選擇判讀醫師後，系統會建立案件並寄 Email（醫師有 APP 也會推播）。</div>` +
@@ -241,6 +241,12 @@ async function load(){
   $('app').querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewReply(b.dataset.view, b));
   $('app').querySelectorAll('[data-form]').forEach(b => b.onclick = () => viewReply(b.dataset.form, b, true));
   $('app').querySelectorAll('[data-disp]').forEach(b => b.onclick = () => dispatchDlg(b.dataset.disp));
+  $('app').querySelectorAll('[data-back]').forEach(b => b.onclick = async () => {
+    if (!confirm('把這份醫師回覆傳回感管室（含個資完整版放到感管室「已完成表單」），並 Email 通知感管室同仁？')) return;
+    b.disabled = true; b.textContent = '送出中…';
+    try { const r = await call('appSendBack', KEY, b.dataset.back); showAlert(`<b style="color:#166534">✅ ${esc(r.msg)}</b>`); load() }
+    catch (e) { showAlert(`<b style="color:#b3261e">傳回失敗</b><br>${esc(e.message)}`); b.disabled = false; b.textContent = '📤 傳回感管＋Email 通知' }
+  });
   $('app').querySelectorAll('[data-remind]').forEach(b => b.onclick = async () => {
     if (!confirm('要提醒這位醫師填寫嗎？（APP 推播＋Email）')) return;
     const old = b.textContent; b.disabled = true; b.textContent = '傳送中…';
