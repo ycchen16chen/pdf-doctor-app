@@ -41,7 +41,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v137';
+const VERSION = '1030-v138';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -158,7 +158,7 @@ async function viewReply(id, btn, form){
 
 /* ---------- 我的表單 ---------- */
 /** 管理者：分派胸部X光判讀醫師（選 APP 醫師，或輸入姓名＋Email） */
-function dispatchDlg(qid){
+function dispatchDlg(qid, isCase){
   const docs = window.__docs || [], a = $('alert');
   a.innerHTML = `<b style="color:#b45309">👩‍⚕️ 分派判讀醫師</b><div class="small" style="margin:6px 0">選擇有 APP 的醫師，或直接輸入醫師姓名＋Email（系統寄 Email 通知；醫師有 APP 也會推播）。</div>` +
     `<label>APP 醫師<select id="dpDoc" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;margin-top:4px"><option value="">（不選，改輸入 Email）</option>${docs.map(d => `<option value="${esc(d.key)}">${esc(d.name)}${d.dept ? '｜' + esc(d.dept) : ''}${d.email ? '' : '（無 Email，只推播 APP）'}</option>`).join('')}</select></label>` +
@@ -170,7 +170,7 @@ function dispatchDlg(qid){
     const k = $('dpDoc').value, n = $('dpName').value.trim(), m = $('dpMail').value.trim();
     if (!k && !m) return ($('dpMsg').textContent = '請選擇 APP 醫師，或輸入醫師 Email');
     $('dpOk').disabled = true; $('dpOk').textContent = '送出中…';
-    try { const r = await call('appDispatch', KEY, qid, { doctorKey: k, doctorName: n, doctorEmail: m }); a.innerHTML = `<b style="color:#166534">✅ ${esc(r.msg)}</b><div style="text-align:right"><button class="btn" onclick="this.closest('#alert').style.display='none'">好</button></div>`; load() }
+    try { const r = await call(isCase ? 'appAssignCase' : 'appDispatch', KEY, qid, { doctorKey: k, doctorName: n, doctorEmail: m }); a.innerHTML = `<b style="color:#166534">✅ ${esc(r.msg)}</b><div style="text-align:right"><button class="btn" onclick="this.closest('#alert').style.display='none'">好</button></div>`; load() }
     catch (e) { $('dpMsg').textContent = e.message; $('dpOk').disabled = false; $('dpOk').textContent = '送出分派' }
   };
 }
@@ -212,11 +212,13 @@ async function load(){
     const mgrBox = !mgr ? '' : `<div style="margin-top:16px;font-weight:bold;color:#166534">👑 醫師回覆（管理者）</div>` +
       (R.length ? R.map(x => `<div class="card done" style="position:relative">${delBtn('r:' + x.id)}<div class="t" style="padding-right:34px">${freshR.includes(x) ? '🆕 ' : ''}${esc(x.doctor)} 醫師已回覆</div><div class="s">${esc(x.title)}${x.mrn ? '｜病歷號 ' + esc(x.mrn) : ''}<br>回覆時間 ${esc(x.returned)}</div>` +
         (x.view ? `<button class="btn" data-view="${esc(x.id)}" style="margin-top:9px">👁 查看回覆內容</button>` : `<div class="s" style="margin-top:6px">回覆內容已清除（舊版保留期限），請向承辦人索取</div>`) + (x.portal ? (x.back ? `<div class="s" style="margin-top:6px;color:${/^已傳回/.test(x.back) ? '#166534' : /^錯誤/.test(x.back) ? '#b3261e' : '#b45309'}">📤 傳回感管：${esc(x.back)}</div>` : '') + (!x.back || /^錯誤/.test(x.back) ? (x.signed ? ` <button class="btn" data-back="${esc(x.id)}" style="margin-top:9px;background:#16a34a;color:#fff;border-color:#16a34a">📤 傳回感管＋Email 通知</button>` : `<div class="s" style="margin-top:6px;color:#b3261e">醫師未簽章，不能傳回感管</div>`) : '') : '') + `</div>`).join('') : '<div class="box ok">目前沒有醫師回覆</div>');
-    const Q = r.queue || [], qWait = Q.filter(x => x.status === '待分派' || x.status === '錯誤');
+    const Q = r.queue || [], U = (r.active || []).filter(x => x.doctor === '（未指定醫師）'), qWait = Q.filter(x => x.status === '待分派' || x.status === '錯誤').concat(U);
     const qTag = s => ({ '待分派': '🟡 待分派', '已指派': '⏳ 建立中', '已建立': '✅ 已寄出', '錯誤': '⚠ 失敗', '已由承辦人處理': '✔ 承辦人已處理' })[s] || s;
     const dispBox = !mgr ? '' : `<details style="margin-top:16px"${qWait.length ? ' open' : ''}><summary style="font-weight:bold;color:#b45309;font-size:15px">📥 待分派判讀：胸部X光（${qWait.length}）</summary><div class="small" style="margin:4px 0 6px">感管室送來的結核病接觸者胸部X光檢查報告表。選擇判讀醫師後，系統會建立案件並寄 Email（醫師有 APP 也會推播）。</div>` +
       (Q.length ? Q.map(x => `<div class="card" style="border-left-color:${x.status === '待分派' || x.status === '錯誤' ? '#f59e0b' : '#16a34a'}"><div class="t">${esc(x.title)}（${x.count} 位）</div><div class="s">${esc(x.by)}｜${esc(x.at)}｜${qTag(x.status)}${x.doctor ? '｜' + esc(x.doctor) : ''}${x.msg ? '<br><span style="color:#b3261e">' + esc(x.msg) + '</span>' : ''}</div>` +
-        (x.status === '待分派' || x.status === '錯誤' ? `<button class="btn" data-disp="${esc(x.qid)}" style="margin-top:9px;background:#f59e0b;color:#fff;border-color:#f59e0b">👩‍⚕️ 分派判讀醫師</button>` : '') + `</div>`).join('') : '<div class="box ok">目前沒有待分派的表單</div>') + `</details>`;
+        (x.status === '待分派' || x.status === '錯誤' ? `<button class="btn" data-disp="${esc(x.qid)}" style="margin-top:9px;background:#f59e0b;color:#fff;border-color:#f59e0b">👩‍⚕️ 分派判讀醫師</button>` : '') + `</div>`).join('') : '') +
+      U.map(x => `<div class="card" style="border-left-color:#f59e0b"><div class="t">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}已建立、尚未指定醫師｜截止 ${esc(x.deadline || '')}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-form="${esc(x.id)}" style="padding:7px 12px;font-size:14px">👁 查看表單</button><button class="btn" data-assign="${esc(x.id)}" style="padding:7px 12px;font-size:14px;background:#f59e0b;color:#fff;border-color:#f59e0b">👩‍⚕️ 分派判讀醫師</button></div></div>`).join('') +
+      (!Q.length && !U.length ? '<div class="box ok">目前沒有待分派的表單</div>' : '') + `</details>`;
     window.__docs = r.docs || [];
     const A = vis('a:', r.active || []);
     const actBox = !mgr ? '' : `<details style="margin-top:16px"${A.length ? ' open' : ''}><summary style="font-weight:bold;color:#1d4ed8;font-size:15px">👑 所有處理中案件（${A.length}）</summary><div class="small" style="margin:4px 0 6px">管理者檢視：表單已隱蔽個資（姓名只留頭尾）</div>` +
@@ -241,6 +243,7 @@ async function load(){
   $('app').querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewReply(b.dataset.view, b));
   $('app').querySelectorAll('[data-form]').forEach(b => b.onclick = () => viewReply(b.dataset.form, b, true));
   $('app').querySelectorAll('[data-disp]').forEach(b => b.onclick = () => dispatchDlg(b.dataset.disp));
+  $('app').querySelectorAll('[data-assign]').forEach(b => b.onclick = () => dispatchDlg(b.dataset.assign, true));
   $('app').querySelectorAll('[data-back]').forEach(b => b.onclick = async () => {
     if (!confirm('把這份醫師回覆傳回感管室（含個資完整版放到感管室「已完成表單」），並 Email 通知感管室同仁？')) return;
     b.disabled = true; b.textContent = '送出中…';
