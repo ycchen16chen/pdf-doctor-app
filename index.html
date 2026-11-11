@@ -41,7 +41,7 @@ label{display:block;margin:10px 0;font-size:15px}
 <script>
 /* ===== 設定：Apps Script 網頁應用程式網址 ===== */
 const API = 'https://script.google.com/macros/s/AKfycbw-mtqUpmnx5cebffRXbNnJNhDmYhsfywumMYIDFWaAH0e6lOtjoh-AKtYK3dNBNb2v/exec';
-const VERSION = '1030-v139';
+const VERSION = '1030-v147';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -159,13 +159,15 @@ async function viewReply(id, btn, form){
 /* ---------- 我的表單 ---------- */
 /** 管理者：分派胸部X光判讀醫師（選 APP 醫師，或輸入姓名＋Email） */
 function dispatchDlg(qid, isCase){
-  const docs = window.__docs || [], a = $('alert');
+  const docs = window.__docs || [], mds = window.__mailDocs || [], a = $('alert');
   a.innerHTML = `<b style="color:#b45309">👩‍⚕️ 分派判讀醫師</b><div class="small" style="margin:6px 0">選擇有 APP 的醫師，或直接輸入醫師姓名＋Email（系統寄 Email 通知；醫師有 APP 也會推播）。</div>` +
     `<label>APP 醫師<select id="dpDoc" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;margin-top:4px"><option value="">（不選，改輸入 Email）</option>${docs.map(d => `<option value="${esc(d.key)}">${esc(d.name)}${d.dept ? '｜' + esc(d.dept) : ''}${d.email ? '' : '（無 Email，只推播 APP）'}</option>`).join('')}</select></label>` +
+    (mds.length ? `<label>Email 醫師名單<select id="dpList" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;margin-top:4px"><option value="">▼ 選擇醫師（${mds.length} 位）</option>${mds.map((d, i) => `<option value="${i}">${esc(d.name || '（未填姓名）')}｜${esc(d.email)}</option>`).join('')}</select></label>` : '') +
     `<label>醫師姓名<input id="dpName" placeholder="例如：馮嘉毅"></label><label>醫師 Email<input id="dpMail" type="email" placeholder="name@vghtpe.gov.tw"></label>` +
     `<div id="dpMsg" style="color:#b3261e;min-height:20px;font-size:14px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="dpX">取消</button><button class="btn" id="dpOk" style="background:#f59e0b;color:#fff;border-color:#f59e0b;font-weight:bold">送出分派</button></div>`;
   a.style.display = 'block';
   $('dpX').onclick = () => { a.style.display = 'none' };
+  if ($('dpList')) $('dpList').onchange = e => { const d = mds[+e.target.value]; if (!d) return; $('dpDoc').value = ''; $('dpName').value = d.name || ''; $('dpMail').value = d.email };
   $('dpOk').onclick = async () => {
     const k = $('dpDoc').value, n = $('dpName').value.trim(), m = $('dpMail').value.trim();
     if (!k && !m) return ($('dpMsg').textContent = '請選擇 APP 醫師，或輸入醫師 Email');
@@ -219,7 +221,7 @@ async function load(){
         (x.status === '待分派' || x.status === '錯誤' ? `<button class="btn" data-disp="${esc(x.qid)}" style="margin-top:9px;background:#f59e0b;color:#fff;border-color:#f59e0b">👩‍⚕️ 分派判讀醫師</button>` : '') + `</div>`).join('') : '') +
       U.map(x => `<div class="card" style="border-left-color:#f59e0b"><div class="t">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}已建立、尚未指定醫師｜截止 ${esc(x.deadline || '')}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-form="${esc(x.id)}" style="padding:7px 12px;font-size:14px">👁 查看表單</button><button class="btn" data-assign="${esc(x.id)}" style="padding:7px 12px;font-size:14px;background:#f59e0b;color:#fff;border-color:#f59e0b">👩‍⚕️ 分派判讀醫師</button></div></div>`).join('') +
       (!Q.length && !U.length ? '<div class="box ok">目前沒有待分派的表單</div>' : '') + `</details>`;
-    window.__docs = r.docs || [];
+    window.__docs = r.docs || []; window.__mailDocs = r.mailDocs || [];
     const A = vis('a:', r.active || []);
     const actBox = !mgr ? '' : `<details style="margin-top:16px"${A.length ? ' open' : ''}><summary style="font-weight:bold;color:#1d4ed8;font-size:15px">👑 所有處理中案件（${A.length}）</summary><div class="small" style="margin:4px 0 6px">管理者檢視：表單已隱蔽個資（姓名只留頭尾）</div>` +
       (A.length ? A.map(x => `<div class="card" style="position:relative">${delBtn('a:' + x.id)}<div class="t" style="padding-right:34px">${esc(x.title)}</div><div class="s">${x.mrn ? '病歷號 ' + esc(x.mrn) + '｜' : ''}處理醫師：<b>${esc(x.doctor)}</b>${x.mine ? '（我）' : ''}<br>${x.status === '已開啟' ? '👀 醫師已開啟 ' + esc(x.opened) : '⏳ 醫師尚未開啟'}${x.deadline ? '｜期限 ' + esc(x.deadline) : ''}<br><span style="color:#94a3b8">送出 ${esc(x.created)}${x.lastSent && x.lastSent !== x.created ? '｜最後提醒 ' + esc(x.lastSent) : ''}</span></div>` +
